@@ -38,7 +38,7 @@ This project is a simplified PayPal-like online payment system developed using D
   - `crispy-bootstrap5`
   - `requests`
 
-## 🛠 Project Structure
+## Project Structure
 
 ```
 webapps2025/
