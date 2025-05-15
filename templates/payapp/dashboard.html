@@ -1,0 +1,322 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+   
+    <div class="col-lg-4 mb-4">
+       
+        <div class="card balance-card">
+            <div class="card-body text-center py-4">
+                <h5 class="card-title text-white-50 mb-3">Account Balance</h5>
+                <h2 class="balance-amount mb-4">{{ profile.formatted_balance }}</h2>
+                
+                <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+                    <a href="{% url 'make_payment' %}" class="btn btn-success btn-lg px-4 gap-3">
+                        <i class="bi bi-send me-2"></i>Send Money
+                    </a>
+                    <a href="{% url 'request_payment' %}" class="btn btn-light btn-lg px-4">
+                        <i class="bi bi-wallet2 me-2"></i>Request
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        {% if pending_requests %}
+        <div class="card mt-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i class="bi bi-hourglass-split me-2"></i>Pending Requests
+                </h5>
+            </div>
+            <div class="card-body">
+                {% for req in pending_requests %}
+                <div class="mb-3 p-3 border rounded bg-light">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-primary">{{ req.formatted_amount }}</span>
+                        <small class="text-muted">{{ req.created_at|timesince }} ago</small>
+                    </div>
+                    <p class="mb-1">
+                        <strong>{{ req.sender.username }}</strong> is requesting payment from you
+                    </p>
+                    
+                    {% if profile.balance < req.amount %}
+                    <div class="alert alert-warning py-2 my-2">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        Warning: You don't have sufficient funds (Your balance: {{ profile.formatted_balance }})
+                    </div>
+                    {% endif %}
+                    
+                    {% if req.description %}
+                    <p class="text-muted small mb-2">{{ req.description }}</p>
+                    {% endif %}
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{% url 'respond_to_request' req.id 'decline' %}" 
+                           class="btn btn-sm btn-outline-danger me-md-2">
+                            <i class="bi bi-x-circle me-1"></i>Decline
+                        </a>
+                        <a href="{% url 'respond_to_request' req.id 'accept' %}" 
+                           class="btn btn-sm btn-success {% if profile.balance < req.amount %}disabled{% endif %}">
+                            <i class="bi bi-check-circle me-1"></i>Accept
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-8">
+      
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-clock-history me-2"></i>Recent Transactions
+                </h5>
+                <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse">
+                    <i class="bi bi-funnel me-1"></i>Filters
+                </button>
+            </div>
+            
+         
+            <div class="collapse" id="filterCollapse">
+                <div class="card-body border-bottom py-3">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="searchInput" class="form-label small text-muted">Search Transactions</label>
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" class="form-control" id="searchInput" placeholder="Search by name, amount, or date...">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="typeFilter" class="form-label small text-muted">Transaction Type</label>
+                            <select class="form-select" id="typeFilter">
+                                <option value="">All Types</option>
+                                <option value="PAYMENT">Payment</option>
+                                <option value="REQUEST">Request</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="statusFilter" class="form-label small text-muted">Status</label>
+                            <select class="form-select" id="statusFilter">
+                                <option value="">All Statuses</option>
+                                <option value="COMPLETED">Completed</option>
+                                <option value="PENDING">Pending</option>
+                                <option value="DECLINED">Declined</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex justify-content-end">
+                        <button type="button" class="btn btn-sm btn-primary me-2" id="applyFilters">
+                            <i class="bi bi-filter me-1"></i>Apply Filters
+                        </button>
+                        <button type="reset" class="btn btn-sm btn-outline-secondary" id="resetFilters">
+                            <i class="bi bi-x-circle me-1"></i>Clear All
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+         
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                    <table class="table table-hover mb-0" id="transactionsTable">
+                        <thead class="sticky-top bg-white" style="box-shadow: 0 2px 15px 0 rgba(0,0,0,0.1);">
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Counterparty</th>
+                                <th class="text-end">Amount</th>
+                                <th>Status</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for trans in transactions %}
+                            <tr class="{% if trans.status == 'COMPLETED' %}table-success{% elif trans.status == 'DECLINED' %}table-danger{% else %}table-warning{% endif %}">
+                                <td>{{ trans.created_at|date:"M d, H:i" }}</td>
+                                <td>
+                                    {% if trans.transaction_type == 'PAYMENT' %}
+                                        <span class="badge bg-success">Payment</span>
+                                    {% else %}
+                                        <span class="badge bg-info">Request</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if trans.sender == request.user %}
+                                        To: {{ trans.recipient.username }}
+                                    {% else %}
+                                        From: {{ trans.sender.username }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end fw-bold">
+    {% if trans.transaction_type == 'PAYMENT' %}
+        {% if trans.sender == request.user %}
+            <span class="text-danger">-{{ trans.formatted_amount }}</span>
+        {% else %}
+            <span class="text-success">+{{ trans.formatted_amount }}</span>
+        {% endif %}
+    {% else %} 
+        {% if trans.status == 'COMPLETED' %}
+            {% if trans.sender == request.user %}
+               
+                <span class="text-success">+{{ trans.formatted_amount }}</span>
+            {% else %}
+              
+                <span class="text-danger">-{{ trans.formatted_amount }}</span>
+            {% endif %}
+        {% else %}
+         
+            <span>{{ trans.formatted_amount }}</span>
+        {% endif %}
+    {% endif %}
+</td>
+                                <td>
+                                    <span class="badge 
+                                        {% if trans.status == 'COMPLETED' %}bg-success
+                                        {% elif trans.status == 'DECLINED' %}bg-danger
+                                        {% else %}bg-warning text-dark{% endif %}">
+                                        {{ trans.get_status_display }}
+                                    </span>
+                                </td>
+                                <td class="small text-muted">
+                                    {{ trans.description|default:""|truncatechars:20 }}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">
+                                    No transactions found
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Custom scrollbar */
+    .table-responsive::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    .table-responsive::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 4px;
+    }
+    .table-responsive::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+    }
+    
+    /* Filter panel styling */
+    #filterCollapse {
+        background-color: #f8f9fc;
+    }
+    
+    /* Table row hover effect */
+    #transactionsTable tbody tr:hover {
+        background-color: rgba(0, 0, 0, 0.02);
+    }
+    
+    /* Balance card styling */
+    .balance-card {
+        background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    .balance-amount {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: white;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  
+    const searchInput = document.getElementById('searchInput');
+    const typeFilter = document.getElementById('typeFilter');
+    const statusFilter = document.getElementById('statusFilter');
+    const applyBtn = document.getElementById('applyFilters');
+    const resetBtn = document.getElementById('resetFilters');
+    const transactionsTable = document.getElementById('transactionsTable');
+    const rows = transactionsTable.getElementsByTagName('tbody')[0].rows;
+
+    function filterTransactions() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const typeValue = typeFilter.value;
+        const statusValue = statusFilter.value;
+        let visibleRows = 0;
+
+        for (let row of rows) {
+            if (row.cells.length < 6) continue; 
+            
+            const date = row.cells[0].textContent.toLowerCase();
+            const type = row.cells[1].textContent.toLowerCase();
+            const counterparty = row.cells[2].textContent.toLowerCase();
+            const amount = row.cells[3].textContent.toLowerCase();
+            const status = row.cells[4].textContent.toLowerCase();
+            const description = row.cells[5].textContent.toLowerCase();
+
+            const matchesSearch = searchTerm === '' || 
+                date.includes(searchTerm) || 
+                counterparty.includes(searchTerm) ||
+                amount.includes(searchTerm) ||
+                description.includes(searchTerm);
+            
+            const matchesType = typeValue === '' || 
+                (typeValue === 'PAYMENT' && type.includes('payment')) || 
+                (typeValue === 'REQUEST' && type.includes('request'));
+                
+            const matchesStatus = statusValue === '' || 
+                (statusValue === 'COMPLETED' && status.includes('completed')) ||
+                (statusValue === 'PENDING' && status.includes('pending')) ||
+                (statusValue === 'DECLINED' && status.includes('declined'));
+
+            if (matchesSearch && matchesType && matchesStatus) {
+                row.style.display = '';
+                visibleRows++;
+            } else {
+                row.style.display = 'none';
+            }
+        }
+
+     
+        const emptyRow = document.querySelector('#transactionsTable tbody tr[style*="display: none"]:last-child');
+        if (emptyRow) {
+            emptyRow.style.display = visibleRows === 0 ? '' : 'none';
+        }
+    }
+
+ 
+    applyBtn.addEventListener('click', filterTransactions);
+    resetBtn.addEventListener('click', function() {
+        searchInput.value = '';
+        typeFilter.selectedIndex = 0;
+        statusFilter.selectedIndex = 0;
+        filterTransactions();
+    });
+
+    let searchTimer;
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(filterTransactions, 300);
+    });
+
+   
+    filterTransactions();
+});
+</script>
+{% endblock %}
